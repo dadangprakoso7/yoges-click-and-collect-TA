@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rumah Makan Multi-Tenant - Skeleton UI (Single File)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* Skeleton animation */
+      .skeleton {
+        background: linear-gradient(
+          90deg,
+          rgba(240, 240, 240, 1) 8%,
+          rgba(230, 230, 230, 1) 18%,
+          rgba(240, 240, 240, 1) 33%
+        );
+        background-size: 200% 100%;
+        animation: shine 1.2s infinite linear;
+      }
+      @keyframes shine {
+        from {
+          background-position: 200% 0;
+        }
+        to {
+          background-position: -200% 0;
+        }
+      }
+
+      /* Print invoice */
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        #invoicePrintable,
+        #invoicePrintable * {
+          visibility: visible;
+        }
+        #invoicePrintable {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+        }
+      }
+
+      /* FIFO specific styles */
+      .fifo-indicator {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .fifo-indicator::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+        background-color: #10b981;
+      }
+
+      .fifo-priority-high {
+        border-left: 4px solid #ef4444;
+      }
+
+      .fifo-priority-medium {
+        border-left: 4px solid #f59e0b;
+      }
+
+      .fifo-priority-low {
+        border-left: 4px solid #3b82f6;
+      }
+
+      .progress-bar {
+        height: 6px;
+        background-color: #e5e7eb;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background-color: #10b981;
+        transition: width 0.3s ease;
+      }
+
+      .time-remaining {
+        font-size: 0.75rem;
+        color: #6b7280;
+      }
+
+      .order-status {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
+      .status-pending {
+        background-color: #fef3c7;
+        color: #92400e;
+      }
+
+      .status-cooking {
+        background-color: #dbeafe;
+        color: #1e40af;
+      }
+
+      .status-ready {
+        background-color: #d1fae5;
+        color: #065f46;
+      }
+
+      .status-completed {
+        background-color: #f3f4f6;
+        color: #374151;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
+    <!-- TOPBAR -->
+    <header class="bg-white shadow sticky top-0 z-30">
+      <div
+        class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between"
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-md skeleton flex items-center justify-center font-semibold text-sm"
+          >
+            RM
+          </div>
+          <div>
+            <div class="font-semibold">Rumah Makan - Multi Tenant</div>
+            <div class="text-xs text-gray-500">Prototype UI/UX (skeleton)</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <label class="text-sm text-gray-600">Role</label>
+          <select id="roleSelect" class="border rounded px-2 py-1 text-sm">
+            <option value="customer">Customer</option>
+            <option value="meja">Meja (Self-Order)</option>
+            <option value="kasir">Kasir</option>
+            <option value="dapur">Dapur</option>
+            <option value="admin">Admin</option>
+            <option value="owner">Owner</option>
+          </select>
+
+          <nav class="hidden md:flex items-center gap-2">
+            <button class="btn-nav text-sm px-3 py-1 rounded" data-page="home">
+              Beranda
+            </button>
+            <button class="btn-nav text-sm px-3 py-1 rounded" data-page="menu">
+              Menu
+            </button>
+            <button
+              class="btn-nav text-sm px-3 py-1 rounded"
+              data-page="reservation"
+            >
+              Reservasi
+            </button>
+            <button class="btn-nav text-sm px-3 py-1 rounded" data-page="stock">
+              Cek Stock
+            </button>
+          </nav>
+
+          <button id="btnLogin" class="ml-3 text-sm px-3 py-1 border rounded">
+            Login
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ROLE BANNER -->
+    <div class="max-w-6xl mx-auto px-4 py-4 w-full">
+      <div
+        class="inline-flex items-center gap-3 bg-white p-3 rounded shadow-sm"
+      >
+        <div
+          id="roleChip"
+          class="px-3 py-1 rounded text-sm font-medium bg-gray-100"
+        >
+          Customer
+        </div>
+        <div class="text-sm text-gray-500">
+          Mode tampilan: <span id="roleName">Customer</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <main class="max-w-6xl mx-auto px-4 flex-1 w-full">
+      <!-- PAGES WRAPPER -->
+      <section id="pages" class="space-y-6">
+        <!-- HOME -->
+        <article id="page-home" class="page bg-white p-5 rounded shadow-sm">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-2 space-y-4">
+              <div class="flex items-center justify-between">
+                <h2 class="text-xl font-semibold">Daftar Tenant & Menu</h2>
+                <div class="text-sm text-gray-500">Skeleton UI</div>
+              </div>
+
+              <div id="tenantList" class="space-y-3">
+                <!-- tenant cards injected by JS -->
+              </div>
+
+              <div class="bg-white p-4 rounded border">
+                <h3 class="font-semibold mb-2">Promo & Pengumuman</h3>
+                <div class="space-y-2">
+                  <div class="h-12 rounded skeleton"></div>
+                  <div class="h-8 w-3/4 rounded skeleton"></div>
+                </div>
+              </div>
+            </div>
+
+            <aside>
+              <div class="bg-white p-4 rounded shadow-sm mb-4">
+                <h4 class="font-semibold mb-2">Aksi Cepat</h4>
+                <div class="grid gap-2">
+                  <button
+                    onclick="showPage('page-order-online')"
+                    class="py-2 rounded border text-sm"
+                  >
+                    Order Online
+                  </button>
+                  <button
+                    onclick="showPage('page-reservation')"
+                    class="py-2 rounded border text-sm"
+                  >
+                    Reservasi
+                  </button>
+                  <button
+                    onclick="showPage('page-selforder')"
+                    class="py-2 rounded border text-sm"
+                  >
+                    Self-Order (Meja)
+                  </button>
+                  <button
+                    onclick="showPage('page-stock')"
+                    class="py-2 rounded border text-sm"
+                  >
+                    Cek Stock
+                  </button>
+                </div>
+              </div>
+
+              <div class="bg-white p-4 rounded shadow-sm">
+                <h4 class="font-semibold mb-2">Jam Buka</h4>
+                <div id="openHours" class="text-sm text-gray-600">
+                  <!-- JS fill -->
+                </div>
+              </div>
+            </aside>
+          </div>
+        </article>
+
+        <!-- MENU -->
+        <article
+          id="page-menu"
+          class="page hidden bg-white p-5 rounded shadow-sm"
+        >
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold">Menu Semua Tenant</h2>
+            <div class="text-sm text-gray-500">Filter & skeleton images</div>
+          </div>
+
+          <div
+            class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+            id="menuGrid"
+          >
+            <!-- product cards injected by JS (some actual content, image skeleton) -->
+          </div>
+        </article>
+
+        <!-- RESERVATION -->
+        <article
+          id="page-reservation"
+          class="page hidden bg-white p-5 rounded shadow-sm"
+        >
+          <h2 class="text-xl font-semibold mb-3">Reservasi Meja</h2>
+          <form
+            id="formReservation"
+            class="grid grid-cols-1 md:grid-cols-2 gap-4"
+          >
+            <div>
+              <label class="block text-sm">Nama</label>
+              <input
+                id="resName"
+                class="w-full border rounded px-3 py-2"
+                placeholder="Nama"
+              />
+            </div>
+            <div>
+              <label class="block text-sm">No HP</label>
+              <input
+                id="resPhone"
+                class="w-full border rounded px-3 py-2"
+                placeholder="08xxxx"
+              />
+            </div>
+            <div>
+              <label class="block text-sm">Tanggal & Jam</label>
+              <input
+                id="resDatetime"
+                type="datetime-local"
+                class="w-full border rounded px-3 py-2"
+              />
+            </div>
+            <div>
+              <label class="block text-sm">Jumlah Orang</label>
+              <input
+                id="resPeople"
+                type="number"
+                min="1"
+                value="2"
+                class="w-full border rounded px-3 py-2"
+              />
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="block text-sm">Pembayaran (Simulasi QRIS)</label>
+              <div class="flex items-center gap-4 mt-2">
+                <div class="w-28 h-28 rounded skeleton"></div>
+                <div class="text-sm text-gray-500">QR code placeholder</div>
+                <div class="ml-auto">
+                  <button
+                    type="button"
+                    id="btnSimPayRes"
+                    class="py-2 px-4 rounded border"
+                  >
+                    Simulasi Bayar QRIS
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </article>
+
+        <!-- ORDER ONLINE -->
+        <article
+          id="page-order-online"
+          class="page hidden bg-white p-5 rounded shadow-sm"
+        >
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold">Order Online (Takeaway)</h2>
+            <div class="text-sm text-gray-500">Pilih waktu pickup</div>
+          </div>
+
+          <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="md:col-span-2">
+              <div id="tenantMenuListOnline" class="space-y-3">
+                <!-- JS fill -->
+              </div>
+            </div>
+
+            <aside class="bg-gray-50 p-4 rounded">
+              <h4 class="font-semibold">Keranjang</h4>
+              <div id="cartOnline" class="space-y-2 mt-2 text-sm text-gray-500">
+                (Kosong)
+              </div>
+              <div class="mt-4">
+                <label class="text-sm">Waktu Pengambilan</label>
+                <input
+                  id="pickupTime"
+                  type="time"
+                  class="w-full border rounded px-2 py-1 mt-1"
+                />
+                <div class="mt-3 text-sm">
+                  Pembayaran: <strong>Hanya QRIS (simulasi)</strong>
+                </div>
+                <button
+                  onclick="simulateCashOrQris('online','qris')"
+                  class="mt-3 py-2 px-4 rounded border w-full"
+                >
+                  Bayar & Submit (Simulasi)
+                </button>
+              </div>
+            </aside>
+          </div>
+        </article>
+
+        <!-- SELF-ORDER (MEJA) -->
+        <article
+          id="page-selforder"
+          class="page hidden bg-white p-5 rounded shadow-sm"
+        >
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold">Self-Order - Meja</h2>
+            <div class="text-sm text-gray-500">Masukkan nomor meja</div>
+          </div>
+
+          <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="md:col-span-2">
+              <div class="mb-3">
+                <input
+                  id="mejaNumber"
+                  type="text"
+                  placeholder="Nomor Meja"
+                  class="border rounded px-3 py-2 w-48"
+                />
+              </div>
+              <div id="tenantMenuListMeja" class="space-y-3"></div>
+            </div>
+
+            <aside class="bg-gray-50 p-4 rounded">
+              <h4 class="font-semibold">Keranjang Meja</h4>
+              <div id="cartMeja" class="space-y-2 mt-2 text-sm text-gray-500">
+                (Kosong)
+              </div>
+              <div class="mt-4 text-sm">Bayar: QRIS atau Tunai (simulasi)</div>
+              <button
+                onclick="simulateCashOrQris('meja','cash')"
+                class="mt-3 py-2 px-4 rounded border w-full"
+              >
+                Bayar (Tunai Simulasi)
+              </button>
+            </aside>
+          </div>
+        </article>
+
+        <!-- KASIR -->
+        <article
+          id="page-kasir"
+          class="page hidden bg-white p-5 rounded shadow-sm"
+        >
+          <h2 class="text-xl font-semibold mb-3">Kasir - Buat Order</h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="md:col-span-2">
+              <div id="tenantMenuKasir" class="space-y-3"></div>
+            </div>
+
+            <aside class="bg-gray-50 p-4 rounded">
+              <h4 class="font-semibold">Keranjang Kasir</h4>
+              <div id="cartKasir" class="space-y-2 mt-2 text-sm text-gray-500">
+                (Kosong)
+              </div>
+              <div class="mt-4">
+                <div class="text-sm mb-2">Pembayaran</div>
+                <div class="flex gap-2">
+                  <button
+                    onclick="simulateCashOrQris('kasir','cash')"
+                    class="py-2 px-3 border rounded"
+                  >
+                    Tunai
+                  </button>
+                  <button
+                    onclick="simulateCashOrQris('kasir','qris')"
+                    class="py-2 px-3 border rounded"
+                  >
+                    QRIS
+                  </button>
+                </div>
+              </div>
+
+              <div class="mt-4">
+                <button
+                  id="btnPrintInvoice"
+                  onclick="openInvoiceModal()"
+                  class="py-2 px-3 border rounded w-full"
+                >
+                  Cetak Invoice
+                </button>
+              </div>
+            </aside>
+          </div>
+        </article>
+
+        <!-- STOCK -->
+        <article
+          id="page-stock"
+          class="page hidden bg-white p-4 rounded shadow-sm"
+        >
+          <h2 class="text-lg font-semibold mb-3">
+            Cek Stock Menu - Semua Tenant
+          </h2>
+          <div
+            id="stockList"
+            class="grid grid-cols-1 md:grid-cols-2 gap-3"
+          ></div>
+        </article>
+
+        <!-- DAPUR -->
+        <article
+          id="page-dapur"
+          class="page hidden bg-white p-4 rounded shadow-sm"
+        >
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold">Dapur - Queue Pesanan</h2>
+            <div class="text-sm text-gray-500">
+              Sistem FIFO (First In First Out)
+            </div>
+          </div>
+
+          <div class="mb-4 bg-blue-50 p-3 rounded border border-blue-200">
+            <div class="flex items-center gap-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5 text-blue-500"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+              <span class="text-sm text-blue-700"
+                >Pesanan diproses berdasarkan urutan kedatangan (FIFO).</span
+              >
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h3 class="font-medium text-gray-700 mb-2">Antrian Pesanan</h3>
+              <div id="kitchenQueue" class="space-y-3"></div>
+            </div>
+
+            <div>
+              <h3 class="font-medium text-gray-700 mb-2">Statistik FIFO</h3>
+              <div class="bg-gray-50 p-4 rounded border">
+                <div class="space-y-3">
+                  <div class="flex justify-between">
+                    <span class="text-sm">Total pesanan hari ini:</span>
+                    <span class="font-medium" id="totalOrdersToday">0</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-sm">Pesanan sedang diproses:</span>
+                    <span class="font-medium" id="ordersInProgress">0</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-sm">Rata-rata waktu tunggu:</span>
+                    <span class="font-medium" id="avgWaitTime">0 menit</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-sm">Pesanan selesai:</span>
+                    <span class="font-medium" id="completedOrders">0</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-4 bg-gray-50 p-4 rounded border">
+                <h4 class="font-medium text-gray-700 mb-2">
+                  Prioritas Pesanan
+                </h4>
+                <div class="space-y-2 text-sm">
+                  <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                    <span>Prioritas Tinggi (pesanan lama)</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <span>Prioritas Sedang</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span>Prioritas Rendah (pesanan baru)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- ADMIN -->
+        <article
+          id="page-admin"
+          class="page hidden bg-white p-4 rounded shadow-sm"
+        >
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Admin Dashboard</h2>
+            <div class="text-sm text-gray-500">Kelola tenant, menu, stock</div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-3 bg-gray-50 rounded">
+              <div class="h-6 w-2/3 skeleton rounded mb-2"></div>
+              <div class="h-20 skeleton rounded"></div>
+            </div>
+            <div class="p-3 bg-gray-50 rounded">
+              <div class="h-6 w-2/3 skeleton rounded mb-2"></div>
+              <div class="h-20 skeleton rounded"></div>
+            </div>
+            <div class="p-3 bg-gray-50 rounded">
+              <div class="h-6 w-2/3 skeleton rounded mb-2"></div>
+              <div class="h-20 skeleton rounded"></div>
+            </div>
+          </div>
+        </article>
+
+        <!-- OWNER -->
+        <article
+          id="page-owner"
+          class="page hidden bg-white p-4 rounded shadow-sm"
+        >
+          <h2 class="text-lg font-semibold">Owner - Overview</h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <div class="p-3 bg-gray-50 rounded">
+              <div class="h-6 w-1/2 skeleton rounded mb-2"></div>
+              <div class="h-12 skeleton rounded"></div>
+            </div>
+            <div class="p-3 bg-gray-50 rounded">
+              <div class="h-6 w-1/2 skeleton rounded mb-2"></div>
+              <div class="h-12 skeleton rounded"></div>
+            </div>
+            <div class="p-3 bg-gray-50 rounded">
+              <div class="h-6 w-1/2 skeleton rounded mb-2"></div>
+              <div class="h-12 skeleton rounded"></div>
+            </div>
+          </div>
+        </article>
+
+        <!-- INVOICE (PRINTABLE SECTION) -->
+        <article
+          id="page-invoice"
+          class="page hidden bg-white p-5 rounded shadow-sm"
+        >
+          <div id="invoicePrintable" class="max-w-xl mx-auto">
+            <h3 class="text-xl font-semibold mb-2">Invoice - Rumah Makan</h3>
+            <div id="invoiceBody" class="text-sm text-gray-700"></div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="text-center text-sm text-gray-500 py-6">
+      Skeleton UI — Rumah Makan Multi-Tenant • dibuat untuk prototipe skripsi
+    </footer>
+
+    <!-- LOGIN MODAL -->
+    <div
+      id="modalLogin"
+      class="fixed inset-0 hidden items-center justify-center z-40"
+    >
+      <div class="absolute inset-0 bg-black/40" onclick="closeLogin()"></div>
+      <div class="bg-white rounded shadow p-6 z-50 w-full max-w-md">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-semibold">Login</h3>
+          <button onclick="closeLogin()" class="text-gray-500">✕</button>
+        </div>
+        <div class="space-y-3">
+          <input
+            id="loginUser"
+            class="w-full border rounded px-3 py-2"
+            placeholder="Username"
+          />
+          <input
+            id="loginPass"
+            type="password"
+            class="w-full border rounded px-3 py-2"
+            placeholder="Password"
+          />
+          <div class="flex justify-end gap-2">
+            <button onclick="closeLogin()" class="py-2 px-3 border rounded">
+              Batal
+            </button>
+            <button
+              onclick="doLogin()"
+              class="py-2 px-3 bg-blue-600 text-white rounded"
+            >
+              Login
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVOICE MODAL (small preview) -->
+    <div
+      id="modalInvoice"
+      class="fixed inset-0 hidden items-center justify-center z-40"
+    >
+      <div
+        class="absolute inset-0 bg-black/40"
+        onclick="closeInvoiceModal()"
+      ></div>
+      <div class="bg-white rounded shadow p-4 z-50 w-full max-w-lg">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold">Invoice Preview</h3>
+          <button onclick="closeInvoiceModal()" class="text-gray-500">✕</button>
+        </div>
+        <div id="invoicePreview" class="text-sm text-gray-700"></div>
+        <div class="mt-4 flex gap-2 justify-end">
+          <button
+            onclick="closeInvoiceModal()"
+            class="py-2 px-3 border rounded"
+          >
+            Tutup
+          </button>
+          <button
+            onclick="printInvoice()"
+            class="py-2 px-3 bg-green-600 text-white rounded"
+          >
+            Cetak
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ---------------------------
+      // Mock data
+      // ---------------------------
+      const tenants = [
+        {
+          id: 1,
+          name: "Warung Soto Pak Budi",
+          tags: ["soto", "nasi"],
+          open: true,
+        },
+        {
+          id: 2,
+          name: "Nasi Goreng Mbak Sari",
+          tags: ["nasi goreng", "gorengan"],
+          open: true,
+        },
+        {
+          id: 3,
+          name: "Kedai Kopi & Snack",
+          tags: ["kopi", "snack"],
+          open: false,
+        },
+      ];
+
+      const menus = [
+        {
+          id: 101,
+          tenantId: 1,
+          name: "Soto Ayam",
+          price: 18000,
+          stock: 10,
+          prepMin: 12,
+          desc: "Soto ayam hangat with sambal",
+        },
+        {
+          id: 102,
+          tenantId: 1,
+          name: "Nasi Putih",
+          price: 5000,
+          stock: 20,
+          prepMin: 2,
+          desc: "Nasi putih pulen",
+        },
+        {
+          id: 201,
+          tenantId: 2,
+          name: "Nasi Goreng Spesial",
+          price: 20000,
+          stock: 5,
+          prepMin: 10,
+          desc: "Nasi goreng with telur & ayam",
+        },
+        {
+          id: 202,
+          tenantId: 2,
+          name: "Pisang Goreng",
+          price: 8000,
+          stock: 12,
+          prepMin: 6,
+          desc: "Pisang goreng renyah",
+        },
+        {
+          id: 301,
+          tenantId: 3,
+          name: "Es Kopi",
+          price: 15000,
+          stock: 8,
+          prepMin: 5,
+          desc: "Es kopi susu",
+        },
+        {
+          id: 302,
+          tenantId: 3,
+          name: "Kroket",
+          price: 7000,
+          stock: 7,
+          prepMin: 7,
+          desc: "Kroket daging",
+        },
+      ];
+
+      const openHours = {
+        days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+        open: "10:00",
+        close: "21:00",
+      };
+
+      // carts & kitchen orders
+      let cartOnline = [];
+      let cartMeja = [];
+      let cartKasir = [];
+      let kitchenOrders = [];
+      let completedOrders = [];
+
+      // FIFO statistics
+      let fifoStats = {
+        totalOrdersToday: 0,
+        ordersInProgress: 0,
+        completedOrders: 0,
+        totalWaitTime: 0,
+      };
+
+      // ---------------------------
+      // Utilities
+      // ---------------------------
+      function $id(id) {
+        return document.getElementById(id);
+      }
+
+      function showPage(id) {
+        document
+          .querySelectorAll(".page")
+          .forEach((p) => p.classList.add("hidden"));
+        const el = $id(id);
+        if (el) el.classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+
+        // Refresh FIFO stats when kitchen page is shown
+        if (id === "page-dapur") {
+          updateFifoStats();
+        }
+      }
+
+      // ---------------------------
+      // FIFO Functions
+      // ---------------------------
+      function calculatePriority(order) {
+        // Calculate priority based on how long the order has been waiting
+        const waitTime = Date.now() - order.createdAt;
+        const waitMinutes = Math.floor(waitTime / (1000 * 60));
+
+        if (waitMinutes > 15) return "high";
+        if (waitMinutes > 8) return "medium";
+        return "low";
+      }
+
+      function calculateProgress(order) {
+        // Calculate progress percentage based on estimated time
+        const elapsed = Date.now() - order.createdAt;
+        const elapsedMinutes = Math.floor(elapsed / (1000 * 60));
+        return Math.min(
+          100,
+          Math.floor((elapsedMinutes / order.etaMinutes) * 100)
+        );
+      }
+
+      function calculateTimeRemaining(order) {
+        const elapsed = Date.now() - order.createdAt;
+        const elapsedMinutes = Math.floor(elapsed / (1000 * 60));
+        return Math.max(0, order.etaMinutes - elapsedMinutes);
+      }
+
+      function updateFifoStats() {
+        fifoStats.totalOrdersToday =
+          kitchenOrders.length + completedOrders.length;
+        fifoStats.ordersInProgress = kitchenOrders.length;
+        fifoStats.completedOrders = completedOrders.length;
+
+        // Calculate average wait time
+        if (completedOrders.length > 0) {
+          const totalWait = completedOrders.reduce((sum, order) => {
+            return sum + order.etaMinutes;
+          }, 0);
+          fifoStats.avgWaitTime = Math.round(
+            totalWait / completedOrders.length
+          );
+        } else {
+          fifoStats.avgWaitTime = 0;
+        }
+
+        // Update UI
+        $id("totalOrdersToday").textContent = fifoStats.totalOrdersToday;
+        $id("ordersInProgress").textContent = fifoStats.ordersInProgress;
+        $id("completedOrders").textContent = fifoStats.completedOrders;
+        $id("avgWaitTime").textContent = `${fifoStats.avgWaitTime} menit`;
+      }
+
+      // ---------------------------
+      // Rendering
+      // ---------------------------
+      function renderTenantList() {
+        const container = $id("tenantList");
+        container.innerHTML = "";
+        tenants.forEach((t) => {
+          const card = document.createElement("div");
+          card.className = "p-4 rounded border flex items-start gap-4";
+          card.innerHTML = `
+                    <div class="w-20 h-20 rounded skeleton flex items-center justify-center text-sm">${
+                      t.name.split(" ")[0]
+                    }</div>
+                    <div class="flex-1">
+                        <div class="font-semibold">${t.name}</div>
+                        <div class="text-xs text-gray-500">${t.tags.join(
+                          " • "
+                        )}</div>
+                        <div class="mt-2 flex gap-2">
+                            <button class="py-1 px-3 border rounded text-sm" onclick="openTenant(${
+                              t.id
+                            })">Lihat Menu</button>
+                            <button class="py-1 px-3 border rounded text-sm" onclick="startOrderFromTenant(${
+                              t.id
+                            })">Order</button>
+                        </div>
+                    </div>
+                    <div class="text-sm ${
+                      t.open ? "text-green-600" : "text-gray-400"
+                    }">${t.open ? "Buka" : "Tutup"}</div>
+                `;
+          container.appendChild(card);
+        });
+      }
+
+      function renderOpenHours() {
+        $id(
+          "openHours"
+        ).innerHTML = `<div class="text-sm">${openHours.days.join(", ")} — ${
+          openHours.open
+        } to ${openHours.close}</div>`;
+      }
+
+      function renderMenuGrid() {
+        const grid = $id("menuGrid");
+        grid.innerHTML = "";
+        // show some real product cards but with skeleton image placeholder
+        menus.forEach((m) => {
+          const el = document.createElement("div");
+          el.className = "p-3 rounded border bg-white";
+          el.innerHTML = `
+                    <div class="h-36 skeleton rounded mb-2"></div>
+                    <div class="font-semibold">${m.name}</div>
+                    <div class="text-sm text-gray-500">Rp ${m.price.toLocaleString()}</div>
+                    <div class="text-xs text-gray-400">${m.desc}</div>
+                    <div class="mt-2 flex gap-2">
+                        <button onclick="addToCart('online', ${
+                          m.id
+                        })" class="py-1 px-2 border rounded text-sm">Tambah</button>
+                        <button onclick="showProductDetail(${
+                          m.id
+                        })" class="py-1 px-2 border rounded text-sm">Detail</button>
+                    </div>
+                `;
+          grid.appendChild(el);
+        });
+      }
+
+      function renderKasirAndMejaLists() {
+        const mk = $id("tenantMenuKasir");
+        const mm = $id("tenantMenuListMeja");
+        const mo = $id("tenantMenuListOnline");
+        mk.innerHTML = "";
+        mm.innerHTML = "";
+        mo.innerHTML = "";
+        menus.forEach((m) => {
+          const cardHtml = `
+                    <div class="p-2 border rounded flex items-center justify-between">
+                        <div>
+                            <div class="font-semibold text-sm">${m.name}</div>
+                            <div class="text-xs text-gray-500">Rp ${m.price.toLocaleString()}</div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="addToCart('kasir', ${
+                              m.id
+                            })" class="py-1 px-2 border rounded text-sm">Tambah</button>
+                            <button onclick="addToCart('meja', ${
+                              m.id
+                            })" class="py-1 px-2 border rounded text-sm">Tambah (Meja)</button>
+                            <button onclick="addToCart('online', ${
+                              m.id
+                            })" class="py-1 px-2 border rounded text-sm">Tambah (Online)</button>
+                        </div>
+                    </div>`;
+          mk.insertAdjacentHTML("beforeend", cardHtml);
+          mm.insertAdjacentHTML("beforeend", cardHtml);
+          mo.insertAdjacentHTML("beforeend", cardHtml);
+        });
+      }
+
+      function renderStock() {
+        const el = $id("stockList");
+        el.innerHTML = "";
+        menus.forEach((m) => {
+          const row = document.createElement("div");
+          row.className =
+            "p-3 border rounded flex items-center justify-between";
+          row.innerHTML = `<div>
+                    <div class="font-semibold">${m.name}</div>
+                    <div class="text-xs text-gray-500">Tenant: ${
+                      tenants.find((t) => t.id === m.tenantId).name
+                    }</div>
+                </div>
+                <div class="text-sm">Stok: <strong>${m.stock}</strong></div>`;
+          el.appendChild(row);
+        });
+      }
+
+      function renderKitchenQueue() {
+        const el = $id("kitchenQueue");
+        el.innerHTML = "";
+
+        // Sort by creation time (FIFO)
+        kitchenOrders.sort((a, b) => a.createdAt - b.createdAt);
+
+        if (kitchenOrders.length === 0) {
+          el.innerHTML = `
+                    <div class="p-4 text-center border rounded bg-gray-50">
+                        <div class="text-gray-500">Tidak ada pesanan dalam antrian</div>
+                    </div>
+                `;
+          return;
+        }
+
+        kitchenOrders.forEach((o, index) => {
+          const priority = calculatePriority(o);
+          const progress = calculateProgress(o);
+          const timeRemaining = calculateTimeRemaining(o);
+          const waitTime = Math.floor((Date.now() - o.createdAt) / (1000 * 60));
+
+          const card = document.createElement("div");
+          card.className = `p-3 border rounded fifo-priority-${priority}`;
+          card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="font-semibold flex items-center gap-2">
+                                <span>Order #${o.orderId}</span>
+                                <span class="order-status ${
+                                  o.status === "pending"
+                                    ? "status-pending"
+                                    : o.status === "cooking"
+                                    ? "status-cooking"
+                                    : "status-ready"
+                                }">
+                                    ${
+                                      o.status === "pending"
+                                        ? "Menunggu"
+                                        : o.status === "cooking"
+                                        ? "Dimasak"
+                                        : "Siap"
+                                    }
+                                </span>
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">Dibuat: ${new Date(
+                              o.createdAt
+                            ).toLocaleTimeString()}</div>
+                            <div class="text-xs text-gray-500">Tunggu: ${waitTime} menit</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm">Estimasi: <strong>${
+                              o.etaMinutes
+                            } mnt</strong></div>
+                            <div class="time-remaining">Sisa: ${timeRemaining} mnt</div>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-sm">${o.items
+                      .map((it) => `${it.name} x ${it.qty}`)
+                      .join(", ")}</div>
+                    <div class="mt-3">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span>Progress</span>
+                            <span>${progress}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex gap-2">
+                        <button class="py-1 px-2 border rounded text-sm flex-1" onclick="updateOrderStatus(${
+                          o.orderId
+                        }, 'cooking')">
+                            Mulai Masak
+                        </button>
+                        <button class="py-1 px-2 border rounded text-sm flex-1" onclick="updateOrderStatus(${
+                          o.orderId
+                        }, 'ready')">
+                            Tandai Siap
+                        </button>
+                        <button class="py-1 px-2 bg-green-600 text-white rounded text-sm flex-1" onclick="markDone(${
+                          o.orderId
+                        })">
+                            Selesai
+                        </button>
+                    </div>
+                `;
+          el.appendChild(card);
+        });
+
+        updateFifoStats();
+      }
+
+      // ---------------------------
+      // Cart logic
+      // ---------------------------
+      function addToCart(type, menuId) {
+        const item = menus.find((m) => m.id === menuId);
+        if (!item) return alert("Item tidak ditemukan");
+        let cart =
+          type === "online"
+            ? cartOnline
+            : type === "meja"
+            ? cartMeja
+            : cartKasir;
+        const exist = cart.find((c) => c.id === menuId);
+        if (exist) exist.qty++;
+        else
+          cart.push({
+            id: menuId,
+            qty: 1,
+            name: item.name,
+            price: item.price,
+            prepMin: item.prepMin,
+          });
+        renderCarts();
+      }
+
+      function renderCarts() {
+        const renderCartTo = (elId, cart) => {
+          const el = $id(elId);
+          el.innerHTML = "";
+          if (cart.length === 0) {
+            el.innerHTML = '<div class="text-sm text-gray-500">(Kosong)</div>';
+            return;
+          }
+          cart.forEach((it) => {
+            const row = document.createElement("div");
+            row.className = "flex items-center justify-between text-sm";
+            row.innerHTML = `<div>${it.name} x ${it.qty}</div><div>Rp ${(
+              it.price * it.qty
+            ).toLocaleString()}</div>`;
+            el.appendChild(row);
+          });
+        };
+        renderCartTo("cartOnline", cartOnline);
+        renderCartTo("cartMeja", cartMeja);
+        renderCartTo("cartKasir", cartKasir);
+      }
+
+      // ---------------------------
+      // Payments / submit order
+      // ---------------------------
+      function simulateCashOrQris(context, type = "qris") {
+        // context: 'online' | 'meja' | 'kasir'
+        const sourceCart =
+          context === "meja"
+            ? cartMeja
+            : context === "kasir"
+            ? cartKasir
+            : cartOnline;
+        if (sourceCart.length === 0) return alert("Keranjang kosong.");
+        alert(
+          `Simulasi pembayaran (${context}) via ${type.toUpperCase()} berhasil (dummy).`
+        );
+
+        // create kitchen order
+        const newId = Math.floor(Math.random() * 9000) + 1000;
+        const items = sourceCart.map((c) => ({
+          name: c.name,
+          qty: c.qty,
+          prepMin: c.prepMin,
+        }));
+        const eta = Math.max(...items.map((i) => i.prepMin));
+
+        kitchenOrders.push({
+          orderId: newId,
+          items,
+          etaMinutes: eta,
+          createdAt: Date.now(),
+          status: "pending",
+        });
+
+        // reduce stock (simple)
+        items.forEach((i) => {
+          const menu = menus.find((m) => m.name === i.name);
+          if (menu) menu.stock = Math.max(0, menu.stock - i.qty);
+        });
+
+        // clear cart
+        if (context === "meja") cartMeja = [];
+        if (context === "kasir") cartKasir = [];
+        if (context === "online") cartOnline = [];
+
+        renderCarts();
+        renderKitchenQueue();
+        renderStock();
+      }
+
+      // ---------------------------
+      // Kitchen actions
+      // ---------------------------
+      function updateOrderStatus(orderId, status) {
+        const order = kitchenOrders.find((o) => o.orderId === orderId);
+        if (order) {
+          order.status = status;
+          renderKitchenQueue();
+        }
+      }
+
+      function markDone(orderId) {
+        const orderIndex = kitchenOrders.findIndex(
+          (o) => o.orderId === orderId
+        );
+        if (orderIndex !== -1) {
+          const completedOrder = kitchenOrders[orderIndex];
+          completedOrder.completedAt = Date.now();
+          completedOrders.push(completedOrder);
+          kitchenOrders.splice(orderIndex, 1);
+          renderKitchenQueue();
+        }
+      }
+
+      // ---------------------------
+      // Invoice printing & modal
+      // ---------------------------
+      function buildInvoiceHtml(orderSourceName, cart) {
+        if (!cart || cart.length === 0)
+          return `<div class="text-sm text-gray-500">Keranjang kosong.</div>`;
+        let total = 0;
+        const lines = cart
+          .map((it) => {
+            const lineTotal = it.price * it.qty;
+            total += lineTotal;
+            return `<div class="flex justify-between"><div>${it.name} x ${
+              it.qty
+            }</div><div>Rp ${lineTotal.toLocaleString()}</div></div>`;
+          })
+          .join("");
+        return `
+                <div>
+                    <div class="text-sm text-gray-600">Tipe: ${orderSourceName}</div>
+                    <div class="mt-3 space-y-2">${lines}</div>
+                    <div class="mt-3 border-t pt-2 font-semibold flex justify-between"><div>Total</div><div>Rp ${total.toLocaleString()}</div></div>
+                </div>
+            `;
+      }
+
+      function openInvoiceModal() {
+        // by default, show kasir cart preview
+        const html = buildInvoiceHtml("Kasir", cartKasir);
+        $id("invoicePreview").innerHTML = html;
+        $id("modalInvoice").classList.remove("hidden");
+        $id("modalInvoice").classList.add("flex");
+      }
+
+      function closeInvoiceModal() {
+        $id("modalInvoice").classList.add("hidden");
+        $id("modalInvoice").classList.remove("flex");
+      }
+
+      function printInvoice() {
+        // show invoice page printable content then call print
+        $id("invoiceBody").innerHTML = buildInvoiceHtml("Kasir", cartKasir);
+        showPage("page-invoice");
+        setTimeout(() => window.print(), 300);
+      }
+
+      // ---------------------------
+      // Product detail (simple modal using alert for now)
+      // ---------------------------
+      function showProductDetail(id) {
+        const m = menus.find((x) => x.id === id);
+        if (!m) return;
+        alert(
+          `${m.name}\nHarga: Rp ${m.price.toLocaleString()}\nStok: ${
+            m.stock
+          }\n\n${m.desc}`
+        );
+      }
+
+      // ---------------------------
+      // Tenant menu quick open
+      // ---------------------------
+      function openTenant(id) {
+        showPage("page-menu");
+        // scroll to menu grid and optionally filter - here we show whole menu but we can highlight tenant items
+        // For simplicity just filter grid to tenant
+        const grid = $id("menuGrid");
+        grid.innerHTML = "";
+        menus
+          .filter((m) => m.tenantId === id)
+          .forEach((m) => {
+            const card = document.createElement("div");
+            card.className = "p-3 rounded border bg-white";
+            card.innerHTML = `
+                        <div class="h-36 skeleton rounded mb-2"></div>
+                        <div class="font-semibold">${m.name}</div>
+                        <div class="text-sm text-gray-500">Rp ${m.price.toLocaleString()}</div>
+                        <div class="mt-2 flex gap-2">
+                            <button onclick="addToCart('online', ${
+                              m.id
+                            })" class="py-1 px-2 border rounded text-sm">Tambah</button>
+                        </div>`;
+            grid.appendChild(card);
+          });
+      }
+
+      function startOrderFromTenant(tenantId) {
+        showPage("page-order-online");
+        const container = $id("tenantMenuListOnline");
+        container.innerHTML = "";
+        menus
+          .filter((m) => m.tenantId === tenantId)
+          .forEach((m) => {
+            const row = document.createElement("div");
+            row.className =
+              "p-3 border rounded flex items-center justify-between";
+            row.innerHTML = `<div>
+                        <div class="font-semibold">${m.name}</div>
+                        <div class="text-xs text-gray-500">Rp ${m.price.toLocaleString()}</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="addToCart('online', ${
+                          m.id
+                        })" class="py-1 px-2 border rounded text-sm">Tambah</button>
+                    </div>`;
+            container.appendChild(row);
+          });
+      }
+
+      // ---------------------------
+      // Role UI switcher & login
+      // ---------------------------
+      function applyRoleUI(role) {
+        const label = role.charAt(0).toUpperCase() + role.slice(1);
+        $id("roleName").textContent = label;
+        $id("roleChip").textContent = label;
+        // landing page by role
+        if (role === "customer") showPage("page-home");
+        else if (role === "meja") showPage("page-selforder");
+        else if (role === "kasir") showPage("page-kasir");
+        else if (role === "dapur") showPage("page-dapur");
+        else if (role === "admin") showPage("page-admin");
+        else if (role === "owner") showPage("page-owner");
+      }
+
+      // ---------------------------
+      // Login modal functions
+      // ---------------------------
+      function openLogin() {
+        $id("modalLogin").classList.remove("hidden");
+        $id("modalLogin").classList.add("flex");
+      }
+
+      function closeLogin() {
+        $id("modalLogin").classList.add("hidden");
+        $id("modalLogin").classList.remove("flex");
+      }
+
+      function doLogin() {
+        const u = $id("loginUser").value.trim();
+        const p = $id("loginPass").value;
+        if (!u || !p) return alert("Masukkan username & password (simulasi).");
+        closeLogin();
+        alert(`Login berhasil (simulasi) sebagai ${u}`);
+      }
+
+      // ---------------------------
+      // Init
+      // ---------------------------
+      document.addEventListener("DOMContentLoaded", () => {
+        // initial render
+        renderTenantList();
+        renderOpenHours();
+        renderMenuGrid();
+        renderKasirAndMejaLists();
+        renderCarts();
+        renderStock();
+        renderKitchenQueue();
+
+        // role selection
+        $id("roleSelect").addEventListener("change", (e) =>
+          applyRoleUI(e.target.value)
+        );
+
+        // nav buttons
+        document.querySelectorAll(".btn-nav").forEach((b) =>
+          b.addEventListener("click", () => {
+            const page = b.getAttribute("data-page");
+            if (page) showPage(`page-${page}`);
+          })
+        );
+
+        // login
+        $id("btnLogin").addEventListener("click", openLogin);
+
+        // reservation payment simulate
+        $id("btnSimPayRes").addEventListener("click", () => {
+          const name = $id("resName").value.trim();
+          if (!name) return alert("Masukkan nama untuk reservasi.");
+          alert("Simulasi pembayaran QRIS untuk reservasi berhasil.");
+        });
+
+        // default role view
+        applyRoleUI("customer");
+      });
+    </script>
+  </body>
+</html>
